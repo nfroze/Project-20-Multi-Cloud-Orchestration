@@ -67,36 +67,25 @@
         state: started
         enabled: yes
     
-    - name: Install Datadog Agent
+    - name: Remove existing Datadog agent if present
+      package:
+        name: datadog-agent
+        state: absent
+      ignore_errors: yes
+      when: datadog_api_key is defined
+    
+    - name: Clean Datadog configuration
+      file:
+        path: /etc/datadog-agent
+        state: absent
+      when: datadog_api_key is defined
+    
+    - name: Install Datadog Agent fresh
       shell: |
         DD_API_KEY="{{ datadog_api_key }}" \
         DD_SITE="datadoghq.eu" \
         bash -c "$(curl -L https://s3.amazonaws.com/dd-agent/scripts/install_script_agent7.sh)"
-      args:
-        creates: /etc/datadog-agent/datadog.yaml
       when: datadog_api_key is defined
-    
-    - name: Configure Datadog agent settings
-      blockinfile:
-        path: /etc/datadog-agent/datadog.yaml
-        block: |
-          api_key: {{ datadog_api_key }}
-          site: datadoghq.eu
-          tags:
-            - cloud:{{ cloud_provider | lower }}
-            - provider:{{ cloud_provider | lower }}
-            - env:production
-          
-          cloud_provider_metadata:
-            - aws
-            - gcp
-            - azure
-        marker: "# {mark} ANSIBLE MANAGED BLOCK"
-        owner: dd-agent
-        group: dd-agent
-        mode: '0640'
-      when: datadog_api_key is defined
-      notify: restart datadog
     
     - name: Configure Datadog nginx monitoring
       copy:
