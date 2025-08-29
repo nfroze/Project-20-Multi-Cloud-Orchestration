@@ -100,4 +100,8 @@ resource "azurerm_linux_virtual_machine" "p20" {
   }
   
   network_interface_ids = [azurerm_network_interface.p20.id]
+  
+  identity {
+    type = "SystemAssigned"
+  }
 }

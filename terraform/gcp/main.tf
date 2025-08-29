@@ -22,6 +22,10 @@ resource "google_compute_instance" "p20" {
   }
   
   tags = ["http-server"]
+
+  service_account {
+    scopes = ["cloud-platform"]
+  }
 }
 
 resource "google_compute_firewall" "p20" {
