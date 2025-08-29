@@ -145,3 +145,4 @@ jobs:
           echo "AWS: http://${{ needs.deploy-aws.outputs.ip }}"
           echo "Azure: http://${{ needs.deploy-azure.outputs.ip }}"
           echo "GCP: http://${{ needs.deploy-gcp.outputs.ip }}"
+          
