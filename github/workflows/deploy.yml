@@ -1,0 +1,147 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'terraform/**'
+      - 'ansible/**'
+      - '.github/workflows/deploy.yml'
+
+jobs:
+  deploy-aws:
+    runs-on: ubuntu-latest
+    outputs:
+      ip: ${{ steps.output.outputs.ip }}
+    steps:
+      - uses: actions/checkout@v3
+      
+      - uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+      
+      - uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_wrapper: false
+      
+      - name: Deploy AWS
+        working-directory: terraform/aws
+        run: |
+          terraform init
+          terraform apply -auto-approve
+      
+      - name: Get output
+        id: output
+        working-directory: terraform/aws
+        run: echo "ip=$(terraform output -raw public_ip)" >> $GITHUB_OUTPUT
+
+  deploy-azure:
+    runs-on: ubuntu-latest
+    outputs:
+      ip: ${{ steps.output.outputs.ip }}
+    steps:
+      - uses: actions/checkout@v3
+      
+      - uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_wrapper: false
+      
+      - name: Deploy Azure
+        working-directory: terraform/azure
+        env:
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          terraform init
+          terraform apply -auto-approve
+      
+      - name: Get output
+        id: output
+        working-directory: terraform/azure
+        run: echo "ip=$(terraform output -raw public_ip)" >> $GITHUB_OUTPUT
+
+  deploy-gcp:
+    runs-on: ubuntu-latest
+    outputs:
+      ip: ${{ steps.output.outputs.ip }}
+    steps:
+      - uses: actions/checkout@v3
+      
+      - uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+      
+      - uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_wrapper: false
+      
+      - name: Deploy GCP
+        working-directory: terraform/gcp
+        env:
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          terraform init
+          terraform apply -auto-approve
+      
+      - name: Get output
+        id: output
+        working-directory: terraform/gcp
+        run: echo "ip=$(terraform output -raw public_ip)" >> $GITHUB_OUTPUT
+
+  configure:
+    needs: [deploy-aws, deploy-azure, deploy-gcp]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install Ansible
+        run: pip install ansible
+      
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/p20-key
+          chmod 600 ~/.ssh/p20-key
+      
+      - name: Create inventory
+        run: |
+          mkdir -p ansible/inventory
+          cat > ansible/inventory/hosts <<EOF
+          [all]
+          aws ansible_host=${{ needs.deploy-aws.outputs.ip }} cloud_provider=AWS ansible_user=ec2-user
+          azure ansible_host=${{ needs.deploy-azure.outputs.ip }} cloud_provider=Azure ansible_user=azureuser
+          gcp ansible_host=${{ needs.deploy-gcp.outputs.ip }} cloud_provider=GCP ansible_user=debian
+          
+          [all:vars]
+          ansible_ssh_private_key_file=~/.ssh/p20-key
+          ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+          EOF
+      
+      - name: Wait for instances
+        run: sleep 60
+      
+      - name: Run Ansible
+        working-directory: ansible
+        env:
+          DATADOG_API_KEY: ${{ secrets.DATADOG_API_KEY }}
+        run: |
+          ansible-playbook playbooks/configure.yml \
+            -i inventory/hosts \
+            -e datadog_api_key=$DATADOG_API_KEY
+      
+      - name: Display endpoints
+        run: |
+          echo "AWS: http://${{ needs.deploy-aws.outputs.ip }}"
+          echo "Azure: http://${{ needs.deploy-azure.outputs.ip }}"
+          echo "GCP: http://${{ needs.deploy-gcp.outputs.ip }}"
