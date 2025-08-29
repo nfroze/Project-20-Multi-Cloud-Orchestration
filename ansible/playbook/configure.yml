@@ -80,12 +80,50 @@
         state: absent
       when: datadog_api_key is defined
     
+    - name: Set Datadog environment variables for Azure
+      copy:
+        content: |
+          DD_CLOUD_PROVIDER_METADATA="azure"
+        dest: /etc/default/datadog-agent
+        mode: '0644'
+      when: datadog_api_key is defined and cloud_provider == "Azure"
+    
+    - name: Set Datadog environment variables for GCP
+      copy:
+        content: |
+          DD_CLOUD_PROVIDER_METADATA="gcp"
+          DD_GCE_METADATA_TIMEOUT=10
+        dest: /etc/default/datadog-agent
+        mode: '0644'
+      when: datadog_api_key is defined and cloud_provider == "GCP"
+    
     - name: Install Datadog Agent fresh
       shell: |
         DD_API_KEY="{{ datadog_api_key }}" \
         DD_SITE="datadoghq.eu" \
         bash -c "$(curl -L https://s3.amazonaws.com/dd-agent/scripts/install_script_agent7.sh)"
       when: datadog_api_key is defined
+    
+    - name: Configure cloud detection for Azure
+      blockinfile:
+        path: /etc/datadog-agent/datadog.yaml
+        block: |
+          cloud_provider_metadata:
+            - azure
+          collect_instance_metadata: true
+        marker: "# {mark} ANSIBLE CLOUD CONFIG"
+      when: datadog_api_key is defined and cloud_provider == "Azure"
+    
+    - name: Configure cloud detection for GCP
+      blockinfile:
+        path: /etc/datadog-agent/datadog.yaml
+        block: |
+          cloud_provider_metadata:
+            - gcp
+          gce_metadata_timeout: 10
+          collect_instance_metadata: true
+        marker: "# {mark} ANSIBLE CLOUD CONFIG"
+      when: datadog_api_key is defined and cloud_provider == "GCP"
     
     - name: Configure Datadog nginx monitoring
       copy:
@@ -98,6 +136,12 @@
         group: dd-agent
       when: datadog_api_key is defined
       notify: restart datadog
+    
+    - name: Restart Datadog to apply config
+      systemd:
+        name: datadog-agent
+        state: restarted
+      when: datadog_api_key is defined
   
   handlers:
     - name: restart nginx
