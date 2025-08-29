@@ -2,6 +2,8 @@ resource "google_compute_instance" "p20" {
   name         = "${var.project_name}-gcp"
   machine_type = var.machine_type
   zone         = var.zone
+
+  allow_stopping_for_update = true
   
   boot_disk {
     initialize_params {
