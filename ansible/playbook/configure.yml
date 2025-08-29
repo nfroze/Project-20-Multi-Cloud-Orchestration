@@ -67,27 +67,32 @@
         state: started
         enabled: yes
     
-    # Datadog Agent
     - name: Install Datadog Agent
       shell: |
         DD_API_KEY="{{ datadog_api_key }}" \
         DD_SITE="datadoghq.eu" \
-        DD_HOSTNAME="{{ cloud_provider | lower }}-p20" \
         bash -c "$(curl -L https://s3.amazonaws.com/dd-agent/scripts/install_script_agent7.sh)"
       args:
         creates: /etc/datadog-agent/datadog.yaml
       when: datadog_api_key is defined
     
     - name: Configure Datadog agent settings
-      copy:
-        content: |
+      blockinfile:
+        path: /etc/datadog-agent/datadog.yaml
+        block: |
           api_key: {{ datadog_api_key }}
           site: datadoghq.eu
+          hostname: {{ cloud_provider | lower }}-p20
           tags:
             - cloud:{{ cloud_provider | lower }}
             - provider:{{ cloud_provider | lower }}
             - env:production
-        dest: /etc/datadog-agent/datadog.yaml
+          
+          cloud_provider_metadata:
+            - aws
+            - gcp
+            - azure
+        marker: "# {mark} ANSIBLE MANAGED BLOCK"
         owner: dd-agent
         group: dd-agent
         mode: '0640'
