@@ -136,7 +136,7 @@ jobs:
         env:
           DATADOG_API_KEY: ${{ secrets.DATADOG_API_KEY }}
         run: |
-          ansible-playbook playbooks/configure.yml \
+          ansible-playbook playbook/configure.yml \
             -i inventory/hosts \
             -e datadog_api_key=$DATADOG_API_KEY
       
@@ -145,4 +145,3 @@ jobs:
           echo "AWS: http://${{ needs.deploy-aws.outputs.ip }}"
           echo "Azure: http://${{ needs.deploy-azure.outputs.ip }}"
           echo "GCP: http://${{ needs.deploy-gcp.outputs.ip }}"
-          
