@@ -1,6 +1,6 @@
 # Project 20: Multi-Cloud Orchestration
 
-Parallel infrastructure deployment to AWS, Azure, and GCP using Terraform. OS-adaptive Ansible configuration. Datadog monitoring. GitHub Actions workflow.
+Infrastructure deployment to AWS, Azure, and GCP using Terraform. Ansible configuration. Datadog monitoring. GitHub Actions workflow.
 
 ## Technologies
 
