@@ -67,7 +67,6 @@
         state: started
         enabled: yes
     
-    # ===== DATADOG AGENT INSTALLATION SECTION =====
     - name: Remove existing Datadog agent if present
       package:
         name: datadog-agent
@@ -81,132 +80,25 @@
         state: absent
       when: datadog_api_key is defined
     
-    - name: Install and Configure Datadog Agent
-      block:
-        - name: Download Datadog installation script
-          get_url:
-            url: https://s3.amazonaws.com/dd-agent/scripts/install_script_agent7.sh
-            dest: /tmp/datadog_install.sh
-            mode: '0755'
-        
-        - name: Install Datadog Agent
-          shell: |
-            DD_API_KEY="{{ datadog_api_key }}" \
-            DD_SITE="datadoghq.eu" \
-            DD_HOSTNAME="{{ cloud_provider | lower }}-p20-instance" \
-            bash /tmp/datadog_install.sh
-          args:
-            creates: /etc/datadog-agent/datadog.yaml
-        
-        - name: Configure Datadog Agent main config
-          copy:
-            content: |
-              api_key: {{ datadog_api_key }}
-              site: datadoghq.eu
-              hostname: {{ cloud_provider | lower }}-p20-instance
-              
-              tags:
-                - env:production
-                - project:p20
-                - cloud:{{ cloud_provider | lower }}
-                - region:{{ ansible_hostname }}
-                - service:web
-              
-              logs_enabled: true
-              
-              # Force cloud provider detection
-              cloud_provider_metadata:
-                - "{{ cloud_provider | lower }}"
-              
-              # Additional settings for better cloud detection
-              {% if cloud_provider == 'Azure' %}
-              azure:
-                collect_metadata: true
-              {% elif cloud_provider == 'GCP' %}
-              gcp:
-                collect_metadata: true
-              collect_gce_tags: true
-              {% elif cloud_provider == 'AWS' %}
-              ec2_metadata_timeout: 300
-              collect_ec2_tags: true
-              {% endif %}
-            dest: /etc/datadog-agent/datadog.yaml
-            owner: dd-agent
-            group: dd-agent
-            mode: '0640'
-            force: yes
-        
-        - name: Configure nginx monitoring
-          copy:
-            content: |
-              init_config:
-              
-              instances:
-                - nginx_status_url: http://localhost/nginx_status
-                  tags:
-                    - cloud:{{ cloud_provider | lower }}
-                    - project:p20
-            dest: /etc/datadog-agent/conf.d/nginx.d/conf.yaml
-            owner: dd-agent
-            group: dd-agent
-            mode: '0644'
-            force: yes
-        
-        - name: Restart Datadog Agent
-          systemd:
-            name: datadog-agent
-            state: restarted
-            enabled: yes
-            daemon_reload: yes
-        
-        - name: Wait for agent to start
-          pause:
-            seconds: 10
-        
-        - name: Check Datadog Agent status
-          command: datadog-agent status
-          register: agent_status
-          ignore_errors: yes
-        
-        - name: Display agent status
-          debug:
-            msg: "Datadog Agent installed and running on {{ cloud_provider }}"
-            verbosity: 1
+    - name: Install Datadog Agent
+      shell: |
+        DD_API_KEY="{{ datadog_api_key }}" \
+        DD_SITE="datadoghq.eu" \
+        DD_HOSTNAME="{{ cloud_provider | lower }}-p20-instance" \
+        bash -c "$(curl -L https://s3.amazonaws.com/dd-agent/scripts/install_script_agent7.sh)"
       when: datadog_api_key is defined
     
-    # ===== DEPLOYMENT INFO SECTION =====
-    - name: Create deployment info file
+    - name: Configure Datadog nginx monitoring
       copy:
         content: |
-          ===================================
-          P20 Multi-Cloud Infrastructure
-          ===================================
-          Cloud Provider: {{ cloud_provider }}
-          Instance: {{ ansible_hostname }}
-          IP Address: {{ ansible_default_ipv4.address }}
-          OS Family: {{ ansible_os_family }}
-          
-          Endpoints:
-          - Web Interface: http://{{ ansible_default_ipv4.address }}/
-          - Health Check: http://{{ ansible_default_ipv4.address }}/health
-          
-          Monitoring:
-          - Datadog Agent: {{ 'Installed' if datadog_api_key is defined else 'Not Installed' }}
-          - Hostname: {{ cloud_provider | lower }}-p20-instance
-          - Region: EU (datadoghq.eu)
-          ===================================
-        dest: /home/{{ ansible_user | default('ubuntu') }}/deployment-info.txt
-        mode: '0644'
-        force: yes
-    
-    - name: Display deployment information
-      debug:
-        msg:
-          - "✅ Infrastructure Deployed Successfully!"
-          - "Provider: {{ cloud_provider }}"
-          - "URL: http://{{ ansible_default_ipv4.address }}/"
-          - "Health: http://{{ ansible_default_ipv4.address }}/health"
-          - "Datadog Agent: {{ 'Installed and collecting metrics' if datadog_api_key is defined else 'Not installed' }}"
+          init_config:
+          instances:
+            - nginx_status_url: http://localhost/nginx_status
+        dest: /etc/datadog-agent/conf.d/nginx.d/conf.yaml
+        owner: dd-agent
+        group: dd-agent
+      when: datadog_api_key is defined
+      notify: restart datadog
   
   handlers:
     - name: restart nginx
