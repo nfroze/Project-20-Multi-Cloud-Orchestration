@@ -85,6 +85,7 @@
         DD_API_KEY="{{ datadog_api_key }}" \
         DD_SITE="datadoghq.eu" \
         DD_HOSTNAME="{{ cloud_provider | lower }}-p20-instance" \
+        DD_TAGS="cloud:{{ cloud_provider | lower }},provider:{{ cloud_provider | lower }},env:production,project:p20,service:web" \
         bash -c "$(curl -L https://s3.amazonaws.com/dd-agent/scripts/install_script_agent7.sh)"
       when: datadog_api_key is defined
     
